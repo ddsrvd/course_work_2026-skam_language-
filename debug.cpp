@@ -39,5 +39,6 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             return simpleInstruction("OP_RETURN", offset);
         default:
             std::cout << "Unknown opcode" << instruction << std::endl;
+            return 0;
     }
 }

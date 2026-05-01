@@ -7,6 +7,11 @@
 typedef enum { // all the functions will be there
     OP_CONSTANT,
     OP_RETURN, // return from current function
+    OP_ADD,
+    OP_SUBTRACT,
+    OP_MULTIPLY,
+    OP_DIVIDE,
+    OP_NEGATE
 } Opcode;
 
 typedef struct {
