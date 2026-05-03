@@ -1,5 +1,6 @@
 #include "vm.h"
 #include <iostream>
+#include "compiler.h"
 
 static VM vm;
 
@@ -13,7 +14,7 @@ void initVM() {
 
 void freeVM() {}
 
-static void push(Value value) {
+void push(Value value) {
     *vm.stackTop = value;
     vm.stackTop++;
 }
@@ -65,8 +66,8 @@ static InterpretResult run() {
 #undef BINARY_OP
 }
 
-InterpretResult interpret(Chunk* chunk) {
-    vm.chunk = chunk;
-    vm.ip = vm.chunk->code;
-    return run();
+
+InterpretResult interpret(const char* source) {
+    compile(source);
+    return INTERPRET_OK;
 }
