@@ -43,7 +43,7 @@ static void runFile(const std::string& path) {
     InterpretResult result = interpret(source.c_str());
 
     if (result == INTERPRET_COMPILE_ERROR) std::exit(65);
-    if (result == INTERPRET_RUNTIME_ERROR) std::exit(70);
+    if (result == INTERPRET_RUNTIME_ERROR) std::exit(1);
 }
 
 static void repl() {

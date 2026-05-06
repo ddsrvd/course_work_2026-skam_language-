@@ -4,15 +4,23 @@
 #include "common.h"
 #include "value.h"
 
-typedef enum { // all the functions will be there
+enum Opcode {
     OP_CONSTANT,
-    OP_RETURN, // return from current function
-    OP_ADD,
+    OP_NIL,
+    OP_TRUE,
+    OP_FALSE,
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
+    OP_ADD,      
     OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
-    OP_NEGATE
-} Opcode;
+    OP_NOT,
+    OP_NEGATE,
+    OP_RETURN    
+};
+
 
 typedef struct {
     int count; //how many of those allocated entries are in use
