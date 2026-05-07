@@ -1,5 +1,1 @@
-// This is a comment
-var x = 42;
-var y = 3.14;
-var str = "hello";
-if (x > 10) print x;
+"Hello, " + "world!"

@@ -2,11 +2,12 @@
 #include <iostream>
 #include <string>
 
-#include "chunk.h"
 #include "common.h"
+#include "value.h"
+#include "object.h"
+#include "chunk.h"
 #include "compiler.h"
 #include "scanner.h"
-#include "value.h"
 #ifdef DEBUG_PRINT_CODE
 #include "debug.h"
 #endif
@@ -95,7 +96,7 @@ void consume(TokenType type, const char *message) {
 }
 
 void emitByte(uint8_t byte) {
-    std::cout << "Writing byte: " << (int)byte << " at line " << parser.previous.line << std::endl;
+   // std::cout << "Writing byte: " << (int)byte << " at line " << parser.previous.line << std::endl;
     writeChunk(currentChunk(), byte, parser.previous.line);
 }
 
@@ -119,6 +120,7 @@ void emitConstant(Value value) { emitBytes(OP_CONSTANT, makeConstant(value)); }
 
 void endCompiler() {
     emitReturn();
+
 #ifdef DEBUG_PRINT_CODE
     if (!parser.hadError) {
         disassembleChunk(currentChunk(), "code");
@@ -127,12 +129,12 @@ void endCompiler() {
 }
 
 // Предварительные объявления функций (Forward declarations)
-void expression();
+static void expression();
 ParseRule *getRule(TokenType type);
 void parsePrecedence(Precedence precedence);
+static void parseStringLiteral();
 
-void binary() {
-    std::cout << "Compiling binary op..." << std::endl;
+static void binary() {
     TokenType operatorType = parser.previous.type;
     ParseRule* rule = getRule(operatorType);
 
@@ -150,7 +152,7 @@ void binary() {
         case TOKEN_PLUS:          emitByte(OP_ADD); break;
         case TOKEN_STAR:          emitByte(OP_MULTIPLY); break;
         case TOKEN_SLASH:         emitByte(OP_DIVIDE); break;
-        default: return; // Недостижимо
+        default: return;
     }
 }
 static void literal(){
@@ -161,14 +163,25 @@ static void literal(){
         default: return;
     }
 }
-void grouping() {
+static void grouping() {
     expression();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
-void number() {
+static void number() {
     double value = std::strtod(parser.previous.start, nullptr);
     emitConstant(NUMBER_VAL(value));
+}
+
+static void parseStringLiteral() {
+    emitConstant(
+        OBJ_VAL(
+            copyString(
+                parser.previous.start + 1,
+                parser.previous.length - 2
+            )
+        )
+    );
 }
 
 static void unary() {
@@ -180,12 +193,12 @@ static void unary() {
     switch (operatorType) {
         case TOKEN_BANG: emitByte(OP_NOT); break;
         case TOKEN_MINUS: emitByte(OP_NEGATE); break;
-        default: return; // Недостижимо
+        default: return; 
     }
 }
 
-// Массив правил (теперь без конфликтов синтаксиса Си)
-ParseRule rules[] = {
+
+ParseRule rules[TOKEN_EOF + 1] = {
     /* [TOKEN_LEFT_PAREN]    = */ {grouping, nullptr, PREC_NONE},
     /* [TOKEN_RIGHT_PAREN]   = */ {nullptr, nullptr, PREC_NONE},
     /* [TOKEN_LEFT_BRACE]    = */ {nullptr, nullptr, PREC_NONE},
@@ -206,7 +219,7 @@ ParseRule rules[] = {
     /* [TOKEN_LESS]          = */ {nullptr, binary, PREC_COMPARISON},
     /* [TOKEN_LESS_EQUAL]    = */ {nullptr, binary, PREC_COMPARISON},
     /* [TOKEN_IDENTIFIER]    = */ {nullptr, nullptr, PREC_NONE},
-    /* [TOKEN_STRING]        = */ {nullptr, nullptr, PREC_NONE},
+    /* [TOKEN_STRING]        = */ {parseStringLiteral, nullptr, PREC_NONE},
     /* [TOKEN_NUMBER]        = */ {number, nullptr, PREC_NONE},
     /* [TOKEN_AND]           = */ {nullptr, nullptr, PREC_NONE},
     /* [TOKEN_CLASS]         = */ {nullptr, nullptr, PREC_NONE},
