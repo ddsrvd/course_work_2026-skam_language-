@@ -1,30 +1,33 @@
-#ifndef skam_vm_h
-#define skam_vm_h
+#ifndef SKAM_VM_H
+#define SKAM_VM_H
 
 #include "chunk.h"
 #include "value.h"
+#include "object.h"
 
 #define STACK_MAX 256
 
-typedef struct {
-    Chunk *chunk;
-    uint8_t *ip;
+struct VM {
+    Chunk* chunk = nullptr;
+    uint8_t* ip = nullptr;
 
     Value stack[STACK_MAX];
-    Value *stackTop;
+    Value* stackTop = nullptr;
 
-} VM;
+    Obj* objects = nullptr;
+};
 
-typedef enum {
+extern VM vm;
+
+enum InterpretResult {
     INTERPRET_OK,
     INTERPRET_COMPILE_ERROR,
     INTERPRET_RUNTIME_ERROR
-} InterpretResult;
+};
 
 void initVM();
 void freeVM();
 
-InterpretResult interpret(const char *source);
-void push(Value value);
+InterpretResult interpret(const char* source);
 
 #endif

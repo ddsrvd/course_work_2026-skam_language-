@@ -1,109 +1,218 @@
 #include "vm.h"
-#include "compiler.h"
-#include "chunk.h"
+
 #include <iostream>
+#include <cstring>
 #include <cstdio>
 #include <cstdarg>
 
-// Анонимное пространство имен скрывает внутреннее состояние (замена static)
-namespace {
+#include "chunk.h"
+#include "compiler.h"
+#include "memory.h"
+#include "object.h"
 
-// Глобальный (но скрытый) экземпляр виртуальной машины
+// ======================================================
+// Глобальная VM
+// ======================================================
+
 VM vm;
 
-void resetStack() { vm.stackTop = vm.stack; }
+// ======================================================
+// Stack helpers
+// ======================================================
+
+void resetStack() {
+    vm.stackTop = vm.stack;
+}
+
+void push(Value value) {
+    *vm.stackTop = value;
+    vm.stackTop++;
+}
+
+Value pop() {
+    vm.stackTop--;
+    return *vm.stackTop;
+}
+
+Value peek(int distance) {
+    return vm.stackTop[-1 - distance];
+}
+
+// ======================================================
+// Runtime errors
+// ======================================================
 
 static void runtimeError(const char* format, ...) {
     va_list args;
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
+
     fputs("\n", stderr);
 
     size_t instruction = vm.ip - vm.chunk->code - 1;
-    
     int line = vm.chunk->lines[instruction];
+
     fprintf(stderr, "[line %d] in script\n", line);
+
     resetStack();
 }
 
-// Извлекает верхнее значение из стека
-Value pop() {
-    vm.stackTop--;
-    return *vm.stackTop;
-}
-static Value peek(int distance) {
-    return vm.stackTop[-1 - distance];
-}
+// ======================================================
+// Utility
+// ======================================================
 
 static bool isFalsey(Value value) {
-    return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
+    return IS_NIL(value) ||
+           (IS_BOOL(value) && !AS_BOOL(value));
 }
-// Главный цикл исполнения (сердце эмулятора)
+
+// ======================================================
+// String concatenation
+// ======================================================
+
+static void concatenate() {
+    ObjString* b = AS_STRING(pop());
+    ObjString* a = AS_STRING(pop());
+
+    int length = a->length + b->length;
+
+    char* chars = ALLOCATE(char, length + 1);
+
+    memcpy(chars, a->chars, a->length);
+    memcpy(chars + a->length, b->chars, b->length);
+
+    chars[length] = '\0';
+
+    ObjString* result = takeString(chars, length);
+
+    push(OBJ_VAL(result));
+}
+
+// ======================================================
+// VM execution loop
+// ======================================================
+
 InterpretResult run() {
-// Макросы для удобного чтения байтов и констант
 #define READ_BYTE() (*vm.ip++)
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
 
-// Макрос для бинарных операций (+, -, *, /)
-#define BINARY_OP(valueType, op)                                                \
-    do { \
-      if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
-        runtimeError("Operands must be numbers."); \
-        return INTERPRET_RUNTIME_ERROR; \
-      } \
-      double b = AS_NUMBER(pop()); \
-      double a = AS_NUMBER(pop()); \
-      push(valueType(a op b)); \
+#define BINARY_OP(valueType, op)                     \
+    do {                                             \
+        if (!IS_NUMBER(peek(0)) ||                   \
+            !IS_NUMBER(peek(1))) {                   \
+            runtimeError("Operands must be numbers."); \
+            return INTERPRET_RUNTIME_ERROR;          \
+        }                                            \
+                                                     \
+        double b = AS_NUMBER(pop());                 \
+        double a = AS_NUMBER(pop());                 \
+                                                     \
+        push(valueType(a op b));                     \
     } while (false)
 
     for (;;) {
-        // 1. Извлечение инструкции (Fetch)
+
         uint8_t instruction = READ_BYTE();
 
-        // 2. Декодирование и исполнение (Decode & Execute)
         switch (instruction) {
+
         case OP_CONSTANT: {
             Value constant = READ_CONSTANT();
             push(constant);
             break;
         }
-        case OP_NIL: push(NIL_VAL); break;
-        case OP_TRUE: push(BOOL_VAL(true)); break;
-        case OP_FALSE: push(BOOL_VAL(false)); break;
+
+        case OP_NIL:
+            push(NIL_VAL);
+            break;
+
+        case OP_TRUE:
+            push(BOOL_VAL(true));
+            break;
+
+        case OP_FALSE:
+            push(BOOL_VAL(false));
+            break;
+
         case OP_EQUAL: {
             Value b = pop();
             Value a = pop();
-            push(BOOL_VAL(valuesEqual(a,b)));
+
+            push(BOOL_VAL(valuesEqual(a, b)));
             break;
         }
-        case OP_GREATER:  BINARY_OP(BOOL_VAL, >); break;
-        case OP_LESS:     BINARY_OP(BOOL_VAL, <); break;
-        case OP_ADD:      BINARY_OP(NUMBER_VAL, +); break;
-        case OP_SUBTRACT: BINARY_OP(NUMBER_VAL, -); break;
-        case OP_MULTIPLY: BINARY_OP(NUMBER_VAL, *); break;
-        case OP_DIVIDE:   BINARY_OP(NUMBER_VAL, /); break;
+
+        case OP_GREATER:
+            BINARY_OP(BOOL_VAL, >);
+            break;
+
+        case OP_LESS:
+            BINARY_OP(BOOL_VAL, <);
+            break;
+
+        case OP_ADD: {
+
+            if (IS_STRING(peek(0)) &&
+                IS_STRING(peek(1))) {
+
+                concatenate();
+
+            } else if (IS_NUMBER(peek(0)) &&
+                       IS_NUMBER(peek(1))) {
+
+                double b = AS_NUMBER(pop());
+                double a = AS_NUMBER(pop());
+
+                push(NUMBER_VAL(a + b));
+
+            } else {
+
+                runtimeError(
+                    "Operands must be two numbers or two strings."
+                );
+
+                return INTERPRET_RUNTIME_ERROR;
+            }
+
+            break;
+        }
+
+        case OP_SUBTRACT:
+            BINARY_OP(NUMBER_VAL, -);
+            break;
+
+        case OP_MULTIPLY:
+            BINARY_OP(NUMBER_VAL, *);
+            break;
+
+        case OP_DIVIDE:
+            BINARY_OP(NUMBER_VAL, /);
+            break;
+
         case OP_NOT:
             push(BOOL_VAL(isFalsey(pop())));
             break;
-        case OP_NEGATE: {
+
+        case OP_NEGATE:
+
             if (!IS_NUMBER(peek(0))) {
-            runtimeError("Operand must be a number.");
-            return INTERPRET_RUNTIME_ERROR;
-        }
-        push(NUMBER_VAL(-AS_NUMBER(pop())));
-        break;
-        }
-        case OP_RETURN: {
-            // Пока что RETURN просто выводит финальный результат программы
-            printValue(pop());
-            std::cout << std::endl;
-            return INTERPRET_OK;
-        
-        }
-        default:
-                runtimeError("Unknown opcode %d", instruction);
+                runtimeError("Operand must be a number.");
                 return INTERPRET_RUNTIME_ERROR;
+            }
+
+            push(NUMBER_VAL(-AS_NUMBER(pop())));
+            break;
+
+        case OP_RETURN: {
+             Value value = pop();
+
+            printValue(value);
+
+            std::cout << std::endl;
+
+         return INTERPRET_OK;
+            }
         }
     }
 
@@ -112,37 +221,39 @@ InterpretResult run() {
 #undef BINARY_OP
 }
 
-} // namespace
+// ======================================================
+// VM lifecycle
+// ======================================================
 
-void initVM() { resetStack(); }
+void initVM() {
+    resetStack();
+    vm.objects = nullptr;
+}
 
 void freeVM() {
-    // В будущем здесь будет запуск Сборщика мусора для очистки всех объектов
+    // freeObjects();
 }
 
-void push(Value value) {
-    *vm.stackTop = value;
-    vm.stackTop++;
-}
+// ======================================================
+// Interpret source
+// ======================================================
 
-InterpretResult interpret(const char *source) {
+InterpretResult interpret(const char* source) {
+
     Chunk chunk;
-    initChunk(&chunk); // Создаем пустой чанк для компилятора
+    initChunk(&chunk);
 
-    // Просим компилятор перевести текст в байт-код и положить в чанк
     if (!compile(source, &chunk)) {
         freeChunk(&chunk);
-        return INTERPRET_COMPILE_ERROR; // Ошибка синтаксиса
+        return INTERPRET_COMPILE_ERROR;
     }
 
-    // Настраиваем машину на выполнение сгенерированного чанка
     vm.chunk = &chunk;
-    vm.ip = vm.chunk->code; // Ставим "курсор" на первый байт
+    vm.ip = vm.chunk->code;
 
-    // Запускаем двигатель!
     InterpretResult result = run();
 
-    // После завершения программы очищаем память чанка
     freeChunk(&chunk);
+
     return result;
 }
