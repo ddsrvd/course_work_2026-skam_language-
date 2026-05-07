@@ -228,9 +228,11 @@ InterpretResult run() {
 void initVM() {
     resetStack();
     vm.objects = nullptr;
+    initTable(&vm.strings);
 }
 
 void freeVM() {
+    freeTable(&vm.strings);
     // freeObjects();
 }
 

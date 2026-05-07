@@ -2,6 +2,7 @@
 #define SKAM_VM_H
 
 #include "chunk.h"
+#include "table.h"
 #include "value.h"
 #include "object.h"
 
@@ -13,6 +14,7 @@ struct VM {
 
     Value stack[STACK_MAX];
     Value* stackTop = nullptr;
+    Table strings;
 
     Obj* objects = nullptr;
 };
