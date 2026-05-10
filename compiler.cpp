@@ -1,19 +1,20 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <string_view>
 
-#include "common.h"
-#include "value.h"
-#include "object.h"
 #include "chunk.h"
+#include "common.h"
 #include "compiler.h"
+#include "object.h"
 #include "scanner.h"
+#include "value.h"
+
 #ifdef DEBUG_PRINT_CODE
 #include "debug.h"
 #endif
 
-// Анонимное пространство имен скрывает всё это внутри текущего файла (как
-// static в Си)
+// Анонимное пространство имен надежно скрывает всё внутреннее состояние
 namespace {
 
 struct Parser {
@@ -37,8 +38,7 @@ enum Precedence {
     PREC_PRIMARY
 };
 
-// В C++ используем указатели на обычные функции
-using ParseFn = void (*)();
+using ParseFn = void (*)(bool canAssign);
 
 struct ParseRule {
     ParseFn prefix;
@@ -46,7 +46,6 @@ struct ParseRule {
     Precedence precedence;
 };
 
-// Глобальные переменные модуля (теперь безопасно скрыты в namespace)
 Parser parser;
 Chunk *compilingChunk = nullptr;
 
@@ -62,7 +61,6 @@ void errorAt(Token *token, const char *message) {
     if (token->type == TOKEN_EOF) {
         std::cerr << " at end";
     } else if (token->type != TOKEN_ERROR) {
-        // std::string_view позволяет распечатать кусок строки без копирования
         std::string_view lexeme(token->start, token->length);
         std::cerr << " at '" << lexeme << "'";
     }
@@ -95,8 +93,16 @@ void consume(TokenType type, const char *message) {
     errorAtCurrent(message);
 }
 
+bool check(TokenType type) { return parser.current.type == type; }
+
+bool match(TokenType type) {
+    if (!check(type))
+        return false;
+    advance();
+    return true;
+}
+
 void emitByte(uint8_t byte) {
-   // std::cout << "Writing byte: " << (int)byte << " at line " << parser.previous.line << std::endl;
     writeChunk(currentChunk(), byte, parser.previous.line);
 }
 
@@ -118,85 +124,126 @@ uint8_t makeConstant(Value value) {
 
 void emitConstant(Value value) { emitBytes(OP_CONSTANT, makeConstant(value)); }
 
-void endCompiler() {
-    emitReturn();
-
-#ifdef DEBUG_PRINT_CODE
-    if (!parser.hadError) {
-        disassembleChunk(currentChunk(), "code");
-    }
-#endif
-}
-
-// Предварительные объявления функций (Forward declarations)
-static void expression();
+// Предварительные объявления всех необходимых функций
+void expression();
+void statement();
+void declaration();
 ParseRule *getRule(TokenType type);
 void parsePrecedence(Precedence precedence);
-static void parseStringLiteral();
 
-static void binary() {
+uint8_t identifierConstant(Token *name) {
+    return makeConstant(OBJ_VAL(copyString(name->start, name->length)));
+}
+
+uint8_t parseVariable(const char *errorMessage) {
+    consume(TOKEN_IDENTIFIER, errorMessage);
+    return identifierConstant(&parser.previous);
+}
+
+void defineVariable(uint8_t global) { emitBytes(OP_DEFINE_GLOBAL, global); }
+
+void namedVariable(Token name, bool canAssign) {
+    uint8_t arg = identifierConstant(&name);
+    if (canAssign && match(TOKEN_EQUAL)) {
+        expression();
+        emitBytes(OP_SET_GLOBAL, arg);
+    } else {
+        emitBytes(OP_GET_GLOBAL, arg);
+    }
+}
+
+void variable(bool canAssign) { namedVariable(parser.previous, canAssign); }
+
+void binary(bool canAssign) {
     TokenType operatorType = parser.previous.type;
-    ParseRule* rule = getRule(operatorType);
+    ParseRule *rule = getRule(operatorType);
 
-    // Компилируем правый операнд с приоритетом на 1 выше текущего
-    parsePrecedence((Precedence)(rule->precedence + 1));
+    parsePrecedence(static_cast<Precedence>(rule->precedence + 1));
 
     switch (operatorType) {
-        case TOKEN_BANG_EQUAL:    emitBytes(OP_EQUAL, OP_NOT); break;
-        case TOKEN_EQUAL_EQUAL:   emitByte(OP_EQUAL); break;
-        case TOKEN_GREATER:       emitByte(OP_GREATER); break;
-        case TOKEN_GREATER_EQUAL: emitBytes(OP_LESS, OP_NOT); break;
-        case TOKEN_LESS:          emitByte(OP_LESS); break;
-        case TOKEN_LESS_EQUAL:    emitBytes(OP_GREATER, OP_NOT); break;
-        case TOKEN_MINUS:         emitByte(OP_SUBTRACT); break;
-        case TOKEN_PLUS:          emitByte(OP_ADD); break;
-        case TOKEN_STAR:          emitByte(OP_MULTIPLY); break;
-        case TOKEN_SLASH:         emitByte(OP_DIVIDE); break;
-        default: return;
+    case TOKEN_BANG_EQUAL:
+        emitBytes(OP_EQUAL, OP_NOT);
+        break;
+    case TOKEN_EQUAL_EQUAL:
+        emitByte(OP_EQUAL);
+        break;
+    case TOKEN_GREATER:
+        emitByte(OP_GREATER);
+        break;
+    case TOKEN_GREATER_EQUAL:
+        emitBytes(OP_LESS, OP_NOT);
+        break;
+    case TOKEN_LESS:
+        emitByte(OP_LESS);
+        break;
+    case TOKEN_LESS_EQUAL:
+        emitBytes(OP_GREATER, OP_NOT);
+        break;
+    case TOKEN_MINUS:
+        emitByte(OP_SUBTRACT);
+        break;
+    case TOKEN_PLUS:
+        emitByte(OP_ADD);
+        break;
+    case TOKEN_STAR:
+        emitByte(OP_MULTIPLY);
+        break;
+    case TOKEN_SLASH:
+        emitByte(OP_DIVIDE);
+        break;
+    default:
+        return;
     }
 }
-static void literal(){
+
+void literal(bool canAssign) {
     switch (parser.previous.type) {
-        case TOKEN_FALSE: emitByte(OP_FALSE); break;
-        case TOKEN_NIL: emitByte(OP_NIL); break;
-        case TOKEN_TRUE: emitByte(OP_TRUE); break;
-        default: return;
+    case TOKEN_FALSE:
+        emitByte(OP_FALSE);
+        break;
+    case TOKEN_NIL:
+        emitByte(OP_NIL);
+        break;
+    case TOKEN_TRUE:
+        emitByte(OP_TRUE);
+        break;
+    default:
+        return;
     }
 }
-static void grouping() {
+
+void grouping(bool canAssign) {
     expression();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
-static void number() {
+void number(bool canAssign) {
     double value = std::strtod(parser.previous.start, nullptr);
     emitConstant(NUMBER_VAL(value));
 }
 
-static void parseStringLiteral() {
-    emitConstant(
-        OBJ_VAL(
-            copyString(
-                parser.previous.start + 1,
-                parser.previous.length - 2
-            )
-        )
-    );
+// Объединил две функции парсинга строк в одну правильную
+void stringLiteral(bool canAssign) {
+    emitConstant(OBJ_VAL(
+        copyString(parser.previous.start + 1, parser.previous.length - 2)));
 }
 
-static void unary() {
+void unary(bool canAssign) {
     TokenType operatorType = parser.previous.type;
 
-    // Компилируем операнд
     parsePrecedence(PREC_UNARY);
 
     switch (operatorType) {
-        case TOKEN_BANG: emitByte(OP_NOT); break;
-        case TOKEN_MINUS: emitByte(OP_NEGATE); break;
-        default: return; 
+    case TOKEN_BANG:
+        emitByte(OP_NOT);
+        break;
+    case TOKEN_MINUS:
+        emitByte(OP_NEGATE);
+        break;
+    default:
+        return;
     }
 }
-
 
 ParseRule rules[TOKEN_EOF + 1] = {
     /* [TOKEN_LEFT_PAREN]    = */ {grouping, nullptr, PREC_NONE},
@@ -218,8 +265,8 @@ ParseRule rules[TOKEN_EOF + 1] = {
     /* [TOKEN_GREATER_EQUAL] = */ {nullptr, binary, PREC_COMPARISON},
     /* [TOKEN_LESS]          = */ {nullptr, binary, PREC_COMPARISON},
     /* [TOKEN_LESS_EQUAL]    = */ {nullptr, binary, PREC_COMPARISON},
-    /* [TOKEN_IDENTIFIER]    = */ {nullptr, nullptr, PREC_NONE},
-    /* [TOKEN_STRING]        = */ {parseStringLiteral, nullptr, PREC_NONE},
+    /* [TOKEN_IDENTIFIER]    = */ {variable, nullptr, PREC_NONE},
+    /* [TOKEN_STRING]        = */ {stringLiteral, nullptr, PREC_NONE},
     /* [TOKEN_NUMBER]        = */ {number, nullptr, PREC_NONE},
     /* [TOKEN_AND]           = */ {nullptr, nullptr, PREC_NONE},
     /* [TOKEN_CLASS]         = */ {nullptr, nullptr, PREC_NONE},
@@ -249,17 +296,17 @@ void parsePrecedence(Precedence precedence) {
         return;
     }
 
-    prefixRule();
+    bool canAssign = precedence <= PREC_ASSIGNMENT;
+    prefixRule(canAssign);
 
     while (precedence <= getRule(parser.current.type)->precedence) {
         advance();
         ParseFn infixRule = getRule(parser.previous.type)->infix;
-        if (infixRule != nullptr) {
-        infixRule();
-        }
-        else{
-            break;
-        }
+        infixRule(canAssign);
+    }
+
+    if (canAssign && match(TOKEN_EQUAL)) {
+        error("Invalid assignment target.");
     }
 }
 
@@ -267,8 +314,86 @@ ParseRule *getRule(TokenType type) { return &rules[type]; }
 
 void expression() { parsePrecedence(PREC_ASSIGNMENT); }
 
+void varDeclaration() {
+    uint8_t global = parseVariable("Expect variable name.");
+
+    if (match(TOKEN_EQUAL)) {
+        expression();
+    } else {
+        emitByte(OP_NIL);
+    }
+    consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+
+    defineVariable(global);
+}
+
+void expressionStatement() {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect ';' after expression.");
+    emitByte(OP_POP);
+}
+
+void printStatement() {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect ';' after value.");
+    emitByte(OP_PRINT);
+}
+
+void synchronize() {
+    parser.panicMode = false;
+
+    while (parser.current.type != TOKEN_EOF) {
+        if (parser.previous.type == TOKEN_SEMICOLON)
+            return;
+
+        switch (parser.current.type) {
+        case TOKEN_CLASS:
+        case TOKEN_FUN:
+        case TOKEN_VAR:
+        case TOKEN_FOR:
+        case TOKEN_IF:
+        case TOKEN_WHILE:
+        case TOKEN_PRINT:
+        case TOKEN_RETURN:
+            return;
+        default:; // Do nothing.
+        }
+        advance();
+    }
+}
+
+void statement() {
+    if (match(TOKEN_PRINT)) {
+        printStatement();
+    } else {
+        expressionStatement();
+    }
+}
+
+void declaration() {
+    if (match(TOKEN_VAR)) {
+        varDeclaration();
+    } else {
+        statement();
+    }
+
+    if (parser.panicMode)
+        synchronize();
+}
+
+void endCompiler() {
+    emitReturn();
+
+#ifdef DEBUG_PRINT_CODE
+    if (!parser.hadError) {
+        disassembleChunk(currentChunk(), "code");
+    }
+#endif
+}
+
 } // namespace
 
+// Единственная функция, доступная для вызова из других файлов
 bool compile(const char *source, Chunk *chunk) {
     initScanner(source);
     compilingChunk = chunk;
@@ -276,8 +401,9 @@ bool compile(const char *source, Chunk *chunk) {
     parser.panicMode = false;
 
     advance();
-    expression();
-    consume(TOKEN_EOF, "Expect end of expression.");
+    while (!match(TOKEN_EOF)) {
+        declaration();
+    }
     endCompiler();
 
     return !parser.hadError;
