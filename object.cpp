@@ -11,7 +11,7 @@
 
 static Obj* allocateObject(size_t size, ObjType type);
 
-static ObjString* allocateString(char* chars, int length);
+static ObjString* allocateString(char* chars, int length, uint32_t hash);
 
 static uint32_t hashString(const char* key, int length) {
   uint32_t hash = 2166136261u;

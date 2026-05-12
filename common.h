@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 // #define DEBUG_PRINT_CODE
-
+#define UINT8_COUNT (UINT8_MAX + 1)
 #endif
 
 /*//> Chunks of Bytecode common-h

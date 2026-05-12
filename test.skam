@@ -1,1 +1,12 @@
-"Hello, " + "world!"
+var a = "global a";
+var b = "global b";
+{
+  var a = "outer local a";
+  {
+    var a = "inner local a";
+    print a; 
+    print b;
+  }
+  print a;
+}
+print a;
