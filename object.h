@@ -2,6 +2,7 @@
 #define SKAM_OBJECT_H
 
 #include "common.h"
+#include "chunk.h"
 #include "value.h"
 
 // =========================
@@ -9,6 +10,8 @@
 // =========================
 
 enum ObjType {
+    OBJ_FUNCTION,
+    OBJ_NATIVE,
     OBJ_STRING,
 };
 
@@ -19,6 +22,20 @@ enum ObjType {
 struct Obj {
     ObjType type;
     Obj* next = nullptr; // linked list для GC
+};
+
+struct ObjFunction {
+    Obj obj;
+    int arity;
+    Chunk chunk;
+    ObjString* name;
+};
+
+using NativeFn = Value (*)(int argCount, Value* args);
+
+struct ObjNative {
+    Obj obj;
+    NativeFn function;
 };
 
 // =========================
@@ -32,6 +49,9 @@ struct ObjString {
     char* chars;
     uint32_t hash;
 };
+
+ObjFunction* newFunction();
+ObjNative* newNative(NativeFn function);
 
 // =========================
 // Макросы для работы с объектами
@@ -49,11 +69,15 @@ inline bool isObjType(Value value, ObjType type) {
            AS_OBJ(value)->type == type;
 }
 
+#define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
+#define IS_NATIVE(value) isObjType(value, OBJ_NATIVE)
 // Проверка строки
 #define IS_STRING(value) isObjType(value, OBJ_STRING)
 
 // Приведение типов
-#define AS_STRING(value)  ((ObjString*)AS_OBJ(value))
+#define AS_FUNCTION(value) ((ObjFunction*)AS_OBJ(value))
+#define AS_NATIVE(value) (((ObjNative*)AS_OBJ(value))->function)
+#define AS_STRING(value) ((ObjString*)AS_OBJ(value))
 #define AS_CSTRING(value) (((ObjString*)AS_OBJ(value))->chars) 
 
 // =========================
