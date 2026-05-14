@@ -10,11 +10,10 @@
 #define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
 
 struct CallFrame {
-    ObjFunction* function;
-    uint8_t* ip;
-    Value* slots;
+    ObjClosure *closure;
+    uint8_t *ip;
+    Value *slots;
 };
-
 
 struct VM {
     CallFrame frames[FRAMES_MAX];
@@ -24,6 +23,7 @@ struct VM {
     Value *stackTop = nullptr;
     Table globals;
     Table strings;
+    ObjUpvalue *openUpvalues;
 
     Obj *objects = nullptr;
 };
