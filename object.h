@@ -17,6 +17,7 @@ enum ObjType { OBJ_CLOSURE, OBJ_FUNCTION, OBJ_NATIVE, OBJ_STRING, OBJ_UPVALUE };
 
 struct Obj {
     ObjType type;
+    bool isMarked;
     Obj *next = nullptr; // linked list для GC
 };
 

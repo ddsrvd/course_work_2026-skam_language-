@@ -7,7 +7,7 @@
 #define UINT8_COUNT (UINT8_MAX + 1)
 #endif
 
-/*//> Chunks of Bytecode common-h
+//> Chunks of Bytecode common-h
 #ifndef clox_common_h
 #define clox_common_h
 
@@ -45,4 +45,3 @@
 #undef DEBUG_STRESS_GC
 #undef DEBUG_LOG_GC
 //< omit
- */

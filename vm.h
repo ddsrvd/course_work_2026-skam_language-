@@ -24,8 +24,13 @@ struct VM {
     Table globals;
     Table strings;
     ObjUpvalue *openUpvalues;
+    size_t bytesAllocated;
+    size_t nextGC;
 
     Obj *objects = nullptr;
+    int grayCount;
+    int grayCapacity;
+    Obj **grayStack;
 };
 
 extern VM vm;
