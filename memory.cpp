@@ -89,7 +89,7 @@ static void blackenObject(Obj *object) {
     case OBJ_CLASS: {
         ObjClass *klass = (ObjClass *)object;
         markObject((Obj *)klass->name);
-        // Вызываем C++ метод для таблицы методов класса
+
         klass->methods.mark();
         break;
     }
@@ -110,7 +110,7 @@ static void blackenObject(Obj *object) {
     case OBJ_INSTANCE: {
         ObjInstance *instance = (ObjInstance *)object;
         markObject((Obj *)instance->klass);
-        // Вызываем C++ метод для полей инстанса
+
         instance->fields.mark();
         break;
     }
@@ -134,7 +134,7 @@ static void freeObject(Obj *object) {
         break;
     case OBJ_CLASS: {
         ObjClass *klass = (ObjClass *)object;
-        // C++ очистка таблицы
+
         klass->methods.free();
         freePointer<ObjClass>(klass);
         break;

@@ -45,7 +45,7 @@ inline Value BOOL_VAL(bool value) {
 inline Value NIL_VAL() {
     Value v;
     v.type = VAL_NIL;
-    v.as.number = 0; // Зануляем память для порядка
+    v.as.number = 0;
     return v;
 }
 
@@ -59,15 +59,11 @@ inline Value NUMBER_VAL(double value) {
 template <typename T> inline Value OBJ_VAL(T *object) {
     Value v;
     v.type = VAL_OBJ;
-    // reinterpret_cast безопасно приведет ObjString*, ObjFunction* и т.д. к
-    // базовому Obj*
     v.as.obj = reinterpret_cast<Obj *>(object);
     return v;
 }
 
-// ============================================================================
 // КЛАСС МАССИВА ЗНАЧЕНИЙ (ValueArray)
-// ============================================================================
 
 class ValueArray {
   public:

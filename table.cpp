@@ -1,7 +1,7 @@
 #include "table.h"
 #include "memory.h"
 #include "object.h"
-#include <cstring> // для memcmp
+#include <cstring>
 
 // максимальный уровень заполненности до расширения (75%)
 constexpr double TABLE_MAX_LOAD = 0.75;
@@ -22,7 +22,6 @@ void Table::free() {
 
 Entry *Table::findEntry(Entry *entriesArray, int currentCapacity,
                         ObjString *key) const {
-    // битовая оптимизация вместо modulo (%)
     uint32_t index = key->hash & (currentCapacity - 1);
     Entry *tombstone = nullptr;
 
@@ -36,7 +35,7 @@ Entry *Table::findEntry(Entry *entriesArray, int currentCapacity,
                 // переиспользования
                 return tombstone != nullptr ? tombstone : entry;
             } else {
-                // мы наткнулись на надгробие (ключ null, значение true)
+
                 if (tombstone == nullptr)
                     tombstone = entry;
             }
@@ -45,7 +44,7 @@ Entry *Table::findEntry(Entry *entriesArray, int currentCapacity,
             return entry;
         }
 
-        // коллизия! идем к следующей ячейке по кругу
+        // идем к следующей ячейке по кругу
         index = (index + 1) & (currentCapacity - 1);
     }
 }
@@ -63,11 +62,10 @@ bool Table::get(ObjString *key, Value *value) const {
 }
 
 void Table::adjustCapacity(int newCapacity) {
-    // выделяем новый чистый массив
     Entry *newEntries = allocate<Entry>(newCapacity);
     for (int i = 0; i < newCapacity; i++) {
         newEntries[i].key = nullptr;
-        newEntries[i].value = NIL_VAL(); // используем функцию вместо макроса
+        newEntries[i].value = NIL_VAL();
     }
 
     // переносим живые данные, игнорируя надгробия
@@ -100,7 +98,7 @@ bool Table::set(ObjString *key, Value value) {
     Entry *entry = findEntry(entries, capacity, key);
     bool isNewKey = entry->key == nullptr;
 
-    // увеличиваем счетчик только если ячейка была пустой (а не надгробием)
+    // увеличиваем счетчик только если ячейка была пустой
     if (isNewKey && IS_NIL(entry->value)) {
         count++;
     }
@@ -118,7 +116,6 @@ bool Table::remove(ObjString *key) {
     if (entry->key == nullptr)
         return false;
 
-    // устанавливаем надгробие вместо реального удаления
     entry->key = nullptr;
     entry->value = BOOL_VAL(true);
     return true;
@@ -143,12 +140,11 @@ ObjString *Table::findString(const char *chars, int length,
         Entry *entry = &entries[index];
 
         if (entry->key == nullptr) {
-            // останавливаемся только если нашли чистую пустоту, а не надгробие
+
             if (IS_NIL(entry->value))
                 return nullptr;
         } else if (entry->key->length == length && entry->key->hash == hash &&
                    std::memcmp(entry->key->chars, chars, length) == 0) {
-            // нашли идеальное совпадение строк!
             return entry->key;
         }
 

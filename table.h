@@ -23,8 +23,7 @@ class Table {
     // основные операции
     bool get(ObjString *key, Value *value) const;
     bool set(ObjString *key, Value value);
-    bool remove(ObjString *key); // заменили delete на remove, так как delete -
-                                 // ключевое слово c++
+    bool remove(ObjString *key);
     void addAll(const Table &from);
 
     // поиск строки по сырым символам (для интернирования)

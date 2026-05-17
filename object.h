@@ -32,7 +32,6 @@ struct ObjFunction {
     ObjString *name;
 };
 
-// тип указателя на встроенную c++ функцию (например, print)
 typedef Value (*NativeFn)(int argCount, Value *args);
 
 struct ObjNative {
@@ -79,10 +78,6 @@ struct ObjBoundMethod {
     ObjClosure *method;
 };
 
-// ============================================================================
-// C++ INLINE-ФУНКЦИИ (Замена сишных макросов)
-// ============================================================================
-
 // получение и проверка типа
 inline ObjType OBJ_TYPE(Value value) { return AS_OBJ(value)->type; }
 inline bool isObjType(Value value, ObjType type) {
@@ -124,9 +119,7 @@ inline ObjString *AS_STRING(Value value) {
 }
 inline char *AS_CSTRING(Value value) { return AS_STRING(value)->chars; }
 
-// ============================================================================
 // ФУНКЦИИ СОЗДАНИЯ ОБЪЕКТОВ
-// ============================================================================
 
 ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method);
 ObjClass *newClass(ObjString *name);

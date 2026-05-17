@@ -1,49 +1,69 @@
-#ifndef SKAM_VM_H
-#define SKAM_VM_H
+#ifndef skam_vm_h
+#define skam_vm_h
 
-#include "chunk.h"
 #include "object.h"
 #include "table.h"
 #include "value.h"
-
 #define FRAMES_MAX 64
-#define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
 
-struct CallFrame {
-    ObjClosure *closure;
-    uint8_t *ip;
-    Value *slots;
-};
-
-struct VM {
-    CallFrame frames[FRAMES_MAX];
-    int frameCount;
-
-    Value stack[STACK_MAX];
-    Value *stackTop = nullptr;
-    Table globals;
-    Table strings;
-    ObjUpvalue *openUpvalues;
-    size_t bytesAllocated;
-    size_t nextGC;
-
-    Obj *objects = nullptr;
-    int grayCount;
-    int grayCapacity;
-    Obj **grayStack;
-};
-
-extern VM vm;
-
-enum InterpretResult {
+typedef enum {
     INTERPRET_OK,
     INTERPRET_COMPILE_ERROR,
     INTERPRET_RUNTIME_ERROR
+} InterpretResult;
+
+typedef struct {
+    ObjClosure *closure;
+    uint8_t *ip;
+    Value *slots;
+} CallFrame;
+
+class VM {
+  public:
+    VM();
+    ~VM();
+
+    InterpretResult interpret(const char *source);
+    InterpretResult interpretBinary(ObjFunction *function);
+    void push(Value value);
+    Value pop();
+
+    CallFrame frames[64];
+    int frameCount;
+
+    Value stack[64 * 256];
+    Value *stackTop;
+
+    Table globals;
+    Table strings;
+    ObjString *initString;
+    ObjUpvalue *openUpvalues;
+
+    size_t bytesAllocated;
+    size_t nextGC;
+    Obj *objects;
+    int grayCount;
+    int grayCapacity;
+    Obj **grayStack;
+
+  private:
+    void resetStack();
+    void runtimeError(const char *format, ...);
+    Value peek(int distance) const;
+    bool isFalsey(Value value) const;
+    bool bindMethod(ObjClass *klass, ObjString *name);
+    bool invokeFromClass(ObjClass *klass, ObjString *name, int argCount);
+    void defineMethod(ObjString *name);
+    bool callValue(Value callee, int argCount);
+    bool invoke(ObjString *name, int argCount);
+    void defineNative(const char *name, NativeFn function);
+    bool call(ObjClosure *closure, int argCount);
+    void concatenate();
+    ObjUpvalue *captureUpvalue(Value *local);
+    void closeUpvalues(Value *last);
+    InterpretResult run();
 };
 
-void initVM();
-void freeVM();
-
-InterpretResult interpret(const char *source);
+extern VM vm;
 
 #endif

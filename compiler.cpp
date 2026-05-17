@@ -10,9 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 
-// ============================================================================
 // ВНУТРЕННИЕ СТРУКТУРЫ ДАННЫХ
-// ============================================================================
 
 struct Parser {
     Token current;
@@ -73,18 +71,14 @@ struct ClassCompiler {
     bool hasSuperclass;
 };
 
-// ============================================================================
 // ГЛОБАЛЬНОЕ СОСТОЯНИЕ (Только внутри этого файла)
-// ============================================================================
 
 static Parser parser;
 static Compiler *current = nullptr;
 static ClassCompiler *currentClass = nullptr;
 static Scanner *currentScanner = nullptr; // Указатель на наш C++ класс сканера
 
-// ============================================================================
 // УПРАВЛЕНИЕ ОШИБКАМИ И ЧТЕНИЕ ТОКЕНОВ
-// ============================================================================
 
 static Chunk *currentChunk() { return &current->function->chunk; }
 
@@ -139,9 +133,7 @@ static bool match(TokenType type) {
     return true;
 }
 
-// ============================================================================
 // ГЕНЕРАЦИЯ БАЙТКОДА (EMITTING)
-// ============================================================================
 
 static void emitByte(uint8_t byte) {
     currentChunk()->write(byte, parser.previous.line);
@@ -179,7 +171,7 @@ static void emitReturn() {
 }
 
 static uint8_t makeConstant(Value value) {
-    // Используем обновленный C++ интерфейс нашего чанка
+
     int constant = currentChunk()->addConstant(value);
     if (constant > UINT8_MAX) {
         error("Too many constants in one chunk.");
@@ -198,16 +190,13 @@ static void patchJump(int offset) {
         error("Too much code to jump over.");
     }
 
-    // Получаем сырой указатель на код для прямой модификации (хак, но
-    // необходимый для JUMP)
+    // Получаем сырой указатель на код для прямой модификации
     uint8_t *code = const_cast<uint8_t *>(currentChunk()->getCode());
     code[offset] = (jump >> 8) & 0xff;
     code[offset + 1] = jump & 0xff;
 }
 
-// ============================================================================
 // ПРЕДВАРИТЕЛЬНЫЕ ОБЪЯВЛЕНИЯ ПАРСЕРА
-// ============================================================================
 
 static void expression();
 static void statement();
@@ -215,9 +204,7 @@ static void declaration();
 static ParseRule *getRule(TokenType type);
 static void parsePrecedence(Precedence precedence);
 
-// ============================================================================
 // ПРАВИЛА ПАРСИНГА И АЛГОРИТМ ПРАТТА
-// ============================================================================
 
 static uint8_t identifierConstant(Token *name) {
     return makeConstant(OBJ_VAL(copyString(name->start, name->length)));
@@ -532,7 +519,6 @@ static void unary(bool canAssign) {
     }
 }
 
-// Правила парсинга в строгом C++ формате без макросов C99
 ParseRule rules[] = {
     {grouping, call, PREC_CALL},        // TOKEN_LEFT_PAREN
     {nullptr, nullptr, PREC_NONE},      // TOKEN_RIGHT_PAREN
@@ -602,9 +588,7 @@ static void parsePrecedence(Precedence precedence) {
 
 static void expression() { parsePrecedence(PREC_ASSIGNMENT); }
 
-// ============================================================================
 // ПАРСИНГ УПРАВЛЯЮЩИХ КОНСТРУКЦИЙ (БЛОКИ И ЦИКЛЫ)
-// ============================================================================
 
 static void beginScope() { current->scopeDepth++; }
 
@@ -629,9 +613,7 @@ static void block() {
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
-// ============================================================================
 // ИНИЦИАЛИЗАЦИЯ И ЗАВЕРШЕНИЕ ФУНКЦИЙ
-// ============================================================================
 
 static void initCompiler(Compiler *compiler, FunctionType type) {
     compiler->enclosing = current;
@@ -676,9 +658,7 @@ static ObjFunction *endCompiler() {
     return function;
 }
 
-// ============================================================================
-// ПАРСИНГ ОБЪЯВЛЕНИЙ (КЛАССЫ, ФУНКЦИИ, ПЕРЕМЕННЫЕ)
-// ============================================================================
+// ПАРСИНГ ОБЪЯВЛЕНИЙ
 
 static void function(FunctionType type) {
     Compiler compiler;
@@ -943,9 +923,7 @@ static void declaration() {
         synchronize();
 }
 
-// ============================================================================
-// ГЛАВНЫЕ ТОЧКИ ВХОДА (ИНТЕРФЕЙСЫ)
-// ============================================================================
+// ИНТЕРФЕЙСЫ
 
 ObjFunction *compile(const char *source) {
     // Инстанцируем наш C++ сканер и передаем указатель в глобальное

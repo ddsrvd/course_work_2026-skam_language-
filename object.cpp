@@ -36,7 +36,7 @@ ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method) {
 ObjClass *newClass(ObjString *name) {
     ObjClass *klass = allocateObject<ObjClass>(OBJ_CLASS);
     klass->name = name;
-    klass->methods.init(); // используем плюсовый метод таблицы
+    klass->methods.init();
     return klass;
 }
 
@@ -59,7 +59,7 @@ ObjFunction *newFunction() {
     function->arity = 0;
     function->upvalueCount = 0;
     function->name = nullptr;
-    function->chunk.init(); // используем плюсовый метод чанка
+    function->chunk.init();
     return function;
 }
 

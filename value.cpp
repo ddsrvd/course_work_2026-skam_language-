@@ -1,7 +1,7 @@
 #include "value.h"
 #include "memory.h"
-#include "object.h" // Нужен для вызова printObject
-#include <cstdio>   
+#include "object.h"
+#include <cstdio>
 
 // --- Реализация методов класса ValueArray ---
 
@@ -61,8 +61,8 @@ bool valuesEqual(Value a, Value b) {
     case VAL_NUMBER:
         return AS_NUMBER(a) == AS_NUMBER(b);
     case VAL_OBJ:
-        return AS_OBJ(a) == AS_OBJ(b); // Для объектов пока сравниваем указатели
-                                       // (адреса в памяти)
+        return AS_OBJ(a) ==
+               AS_OBJ(b); // Для объектов сравниваем адреса в памяти
     default:
         return false; // Недостижимое место в коде
     }

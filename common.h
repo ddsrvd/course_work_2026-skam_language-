@@ -1,6 +1,6 @@
-#pragma once // Заменяем #ifndef на современную защиту
+#pragma once
 
-#include <cstddef> // Плюсовые аналоги сишных библиотек [cite: 801]
+#include <cstddef>
 #include <cstdint>
 #include <limits> // Для получения точных пределов типов
 
