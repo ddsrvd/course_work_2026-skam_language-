@@ -1,7 +1,11 @@
 #include "memory.h"
+#include "common.h"
 #include "compiler.h"
+#include "object.h"
+#include "table.h"
+#include "value.h"
 #include "vm.h"
-#include <cstdlib>
+#include <stdlib.h>
 
 #ifdef DEBUG_LOG_GC
 #include "debug.h"
@@ -12,7 +16,6 @@
 
 void *reallocate(void *pointer, size_t oldSize, size_t newSize) {
     vm.bytesAllocated += newSize - oldSize;
-
     if (newSize > oldSize) {
 #ifdef DEBUG_STRESS_GC
         collectGarbage();
@@ -21,10 +24,12 @@ void *reallocate(void *pointer, size_t oldSize, size_t newSize) {
             collectGarbage();
         }
     }
+
     if (newSize == 0) {
         free(pointer);
         return NULL;
     }
+
     void *result = realloc(pointer, newSize);
     if (result == NULL)
         exit(1);
@@ -36,14 +41,17 @@ void markObject(Obj *object) {
         return;
     if (object->isMarked)
         return;
+
 #ifdef DEBUG_LOG_GC
     printf("%p mark ", (void *)object);
     printValue(OBJ_VAL(object));
     printf("\n");
 #endif
+
     object->isMarked = true;
+
     if (vm.grayCapacity < vm.grayCount + 1) {
-        vm.grayCapacity = GROW_CAPACITY(vm.grayCapacity);
+        vm.grayCapacity = growCapacity(vm.grayCapacity);
         vm.grayStack =
             (Obj **)realloc(vm.grayStack, sizeof(Obj *) * vm.grayCapacity);
         if (vm.grayStack == NULL)
@@ -70,7 +78,21 @@ static void blackenObject(Obj *object) {
     printValue(OBJ_VAL(object));
     printf("\n");
 #endif
+
     switch (object->type) {
+    case OBJ_BOUND_METHOD: {
+        ObjBoundMethod *bound = (ObjBoundMethod *)object;
+        markValue(bound->receiver);
+        markObject((Obj *)bound->method);
+        break;
+    }
+    case OBJ_CLASS: {
+        ObjClass *klass = (ObjClass *)object;
+        markObject((Obj *)klass->name);
+        // Вызываем C++ метод для таблицы методов класса
+        klass->methods.mark();
+        break;
+    }
     case OBJ_CLOSURE: {
         ObjClosure *closure = (ObjClosure *)object;
         markObject((Obj *)closure->function);
@@ -85,6 +107,13 @@ static void blackenObject(Obj *object) {
         markArray(&function->chunk.constants);
         break;
     }
+    case OBJ_INSTANCE: {
+        ObjInstance *instance = (ObjInstance *)object;
+        markObject((Obj *)instance->klass);
+        // Вызываем C++ метод для полей инстанса
+        instance->fields.mark();
+        break;
+    }
     case OBJ_UPVALUE:
         markValue(((ObjUpvalue *)object)->closed);
         break;
@@ -93,49 +122,57 @@ static void blackenObject(Obj *object) {
         break;
     }
 }
-// освобождение heap-объекта
+
 static void freeObject(Obj *object) {
 #ifdef DEBUG_LOG_GC
     printf("%p free type %d\n", (void *)object, object->type);
 #endif
-    switch (object->type) {
 
+    switch (object->type) {
+    case OBJ_BOUND_METHOD:
+        freePointer<ObjBoundMethod>((ObjBoundMethod *)object);
+        break;
+    case OBJ_CLASS: {
+        ObjClass *klass = (ObjClass *)object;
+        // C++ очистка таблицы
+        klass->methods.free();
+        freePointer<ObjClass>(klass);
+        break;
+    }
     case OBJ_CLOSURE: {
         ObjClosure *closure = (ObjClosure *)object;
-        FREE_ARRAY(ObjUpvalue *, closure->upvalues, closure->upvalueCount);
-        FREE(ObjClosure, object);
+        freeArray<ObjUpvalue *>(closure->upvalues, closure->upvalueCount);
+        freePointer<ObjClosure>(closure);
         break;
     }
     case OBJ_FUNCTION: {
         ObjFunction *function = (ObjFunction *)object;
-        freeChunk(&function->chunk);
-        FREE(ObjFunction, object);
+        function->chunk.free();
+        freePointer<ObjFunction>(function);
         break;
     }
-
-    case OBJ_NATIVE: {
-        FREE(ObjNative, object);
+    case OBJ_INSTANCE: {
+        ObjInstance *instance = (ObjInstance *)object;
+        instance->fields.free();
+        freePointer<ObjInstance>(instance);
         break;
     }
-
+    case OBJ_NATIVE:
+        freePointer<ObjNative>((ObjNative *)object);
+        break;
     case OBJ_STRING: {
         ObjString *string = (ObjString *)object;
-
-        // освобождаем массив символов
-        FREE_ARRAY(char, string->chars, string->length + 1);
-
-        // освобождаем сам объект
-        FREE(ObjString, object);
-
+        freeArray<char>(string->chars, string->length + 1);
+        freePointer<ObjString>(string);
         break;
     }
     case OBJ_UPVALUE:
-        FREE(ObjUpvalue, object);
+        freePointer<ObjUpvalue>((ObjUpvalue *)object);
         break;
     }
 }
 
-static void markRoots() {
+void markRoots() {
     for (Value *slot = vm.stack; slot < vm.stackTop; slot++) {
         markValue(*slot);
     }
@@ -148,7 +185,9 @@ static void markRoots() {
          upvalue = upvalue->next) {
         markObject((Obj *)upvalue);
     }
-    markTable(&vm.globals);
+
+    vm.globals.mark();
+
     markCompilerRoots();
 }
 
@@ -175,7 +214,6 @@ static void sweep() {
             } else {
                 vm.objects = object;
             }
-
             freeObject(unreached);
         }
     }
@@ -189,7 +227,9 @@ void collectGarbage() {
 
     markRoots();
     traceReferences();
-    tableRemoveWhite(&vm.strings);
+
+    vm.strings.removeWhite();
+
     sweep();
 
     vm.nextGC = vm.bytesAllocated * GC_HEAP_GROW_FACTOR;
@@ -200,17 +240,13 @@ void collectGarbage() {
            before - vm.bytesAllocated, before, vm.bytesAllocated, vm.nextGC);
 #endif
 }
-// освобождение всех объектов VM
+
 void freeObjects() {
     Obj *object = vm.objects;
-
-    while (object != nullptr) {
+    while (object != NULL) {
         Obj *next = object->next;
-
         freeObject(object);
-
         object = next;
     }
-
     free(vm.grayStack);
 }

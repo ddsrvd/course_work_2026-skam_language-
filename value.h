@@ -1,113 +1,90 @@
-#ifndef SKAM_VALUE_H
-#define SKAM_VALUE_H
+#pragma once
 
 #include "common.h"
+#include <cstring>
 
 struct Obj;
 
-// =========================
-// Типы значений
-// =========================
-
+// Типы данных, которые поддерживает наша виртуальная машина
 enum ValueType {
     VAL_BOOL,
     VAL_NIL,
     VAL_NUMBER,
-    VAL_OBJ
+    VAL_OBJ // Любые сложные данные (строки, классы, функции), живущие в куче
+            // (heap)
 };
 
-// =========================
-// Value
-// =========================
-
+// Главная структура данных
 struct Value {
-    ValueType type;
-
+    ValueType type; // "Бирка" типа
     union {
         bool boolean;
         double number;
-        Obj* obj;
-    } as;
+        Obj *obj;
+    } as; // Сами данные
 };
 
-// =========================
-// Проверка типов
-// =========================
+// Проверка типа (IS_...)
+inline bool IS_BOOL(Value value) { return value.type == VAL_BOOL; }
+inline bool IS_NIL(Value value) { return value.type == VAL_NIL; }
+inline bool IS_NUMBER(Value value) { return value.type == VAL_NUMBER; }
+inline bool IS_OBJ(Value value) { return value.type == VAL_OBJ; }
 
-#define IS_BOOL(value)    ((value).type == VAL_BOOL)
-#define IS_NIL(value)     ((value).type == VAL_NIL)
-#define IS_NUMBER(value)  ((value).type == VAL_NUMBER)
-#define IS_OBJ(value)     ((value).type == VAL_OBJ)
+// Извлечение данных (AS_...)
+inline bool AS_BOOL(Value value) { return value.as.boolean; }
+inline double AS_NUMBER(Value value) { return value.as.number; }
+inline Obj *AS_OBJ(Value value) { return value.as.obj; }
 
-// =========================
-// Извлечение значений
-// =========================
-
-#define AS_BOOL(value)    ((value).as.boolean)
-#define AS_NUMBER(value)  ((value).as.number)
-#define AS_OBJ(value)     ((value).as.obj)
-
-// =========================
-// Создание значений
-// =========================
-
-inline Value boolValue(bool value) {
-    Value result;
-    result.type = VAL_BOOL;
-    result.as.boolean = value;
-    return result;
+inline Value BOOL_VAL(bool value) {
+    Value v;
+    v.type = VAL_BOOL;
+    v.as.boolean = value;
+    return v;
 }
 
-inline Value nilValue() {
-    Value result;
-    result.type = VAL_NIL;
-    result.as.number = 0;
-    return result;
+inline Value NIL_VAL() {
+    Value v;
+    v.type = VAL_NIL;
+    v.as.number = 0; // Зануляем память для порядка
+    return v;
 }
 
-inline Value numberValue(double value) {
-    Value result;
-    result.type = VAL_NUMBER;
-    result.as.number = value;
-    return result;
+inline Value NUMBER_VAL(double value) {
+    Value v;
+    v.type = VAL_NUMBER;
+    v.as.number = value;
+    return v;
 }
 
-inline Value objValue(Obj* object) {
-    Value result;
-    result.type = VAL_OBJ;
-    result.as.obj = object;
-    return result;
+template <typename T> inline Value OBJ_VAL(T *object) {
+    Value v;
+    v.type = VAL_OBJ;
+    // reinterpret_cast безопасно приведет ObjString*, ObjFunction* и т.д. к
+    // базовому Obj*
+    v.as.obj = reinterpret_cast<Obj *>(object);
+    return v;
 }
 
-// =========================
-// Макросы совместимости
-// =========================
+// ============================================================================
+// КЛАСС МАССИВА ЗНАЧЕНИЙ (ValueArray)
+// ============================================================================
 
-#define BOOL_VAL(value)   boolValue(value)
-#define NIL_VAL           nilValue()
-#define NUMBER_VAL(value) numberValue(value)
-#define OBJ_VAL(object)   objValue((Obj*)object)
+class ValueArray {
+  public:
+    ValueArray();
 
-// =========================
-// ValueArray
-// =========================
+    void init();
+    void free();
+    void write(Value value);
 
-struct ValueArray {
-    int capacity = 0;
-    int count = 0;
-    Value* values = nullptr;
+    int getCount() const { return count; }
+    Value getValue(int index) const { return values[index]; }
+
+    int capacity;
+    int count;
+    Value *values;
 };
 
-// =========================
-// Функции
-// =========================
-
-bool valuesEqual(Value a, Value b);
-
-void initValueArray(ValueArray* array);
-void writeValueArray(ValueArray* array, Value value);
-void freeValueArray(ValueArray* array);
-
+// глобальные функции для работы со значениями
 void printValue(Value value);
-
-#endif
+bool valuesEqual(Value a, Value b);

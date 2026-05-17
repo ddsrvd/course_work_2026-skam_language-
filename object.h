@@ -1,48 +1,47 @@
-#ifndef SKAM_OBJECT_H
-#define SKAM_OBJECT_H
+#pragma once
 
 #include "chunk.h"
 #include "common.h"
+#include "table.h"
 #include "value.h"
 
-// =========================
-// Типы объектов VM
-// =========================
+// типы всех сложных объектов, живущих в куче
+enum ObjType {
+    OBJ_BOUND_METHOD,
+    OBJ_CLASS,
+    OBJ_CLOSURE,
+    OBJ_FUNCTION,
+    OBJ_INSTANCE,
+    OBJ_NATIVE,
+    OBJ_STRING,
+    OBJ_UPVALUE
+};
 
-enum ObjType { OBJ_CLOSURE, OBJ_FUNCTION, OBJ_NATIVE, OBJ_STRING, OBJ_UPVALUE };
-
-// =========================
-// Базовый объект
-// =========================
-
+// базовый объект для сборщика мусора
 struct Obj {
     ObjType type;
     bool isMarked;
-    Obj *next = nullptr; // linked list для GC
+    Obj *next; // указатель на следующий объект для цепочки GC
 };
 
 struct ObjFunction {
-    Obj obj;
+    Obj obj; // базовый объект всегда первый!
     int arity;
     int upvalueCount;
     Chunk chunk;
     ObjString *name;
 };
 
-using NativeFn = Value (*)(int argCount, Value *args);
+// тип указателя на встроенную c++ функцию (например, print)
+typedef Value (*NativeFn)(int argCount, Value *args);
 
 struct ObjNative {
     Obj obj;
     NativeFn function;
 };
 
-// =========================
-// Строковый объект
-// =========================
-
 struct ObjString {
     Obj obj;
-
     int length;
     char *chars;
     uint32_t hash;
@@ -52,7 +51,7 @@ struct ObjUpvalue {
     Obj obj;
     Value *location;
     Value closed;
-    struct ObjUpvalue *next;
+    ObjUpvalue *next;
 };
 
 struct ObjClosure {
@@ -62,50 +61,82 @@ struct ObjClosure {
     int upvalueCount;
 };
 
-ObjClosure *newClosure(ObjFunction *function);
+struct ObjClass {
+    Obj obj;
+    ObjString *name;
+    Table methods;
+};
 
+struct ObjInstance {
+    Obj obj;
+    ObjClass *klass;
+    Table fields;
+};
+
+struct ObjBoundMethod {
+    Obj obj;
+    Value receiver;
+    ObjClosure *method;
+};
+
+// ============================================================================
+// C++ INLINE-ФУНКЦИИ (Замена сишных макросов)
+// ============================================================================
+
+// получение и проверка типа
+inline ObjType OBJ_TYPE(Value value) { return AS_OBJ(value)->type; }
+inline bool isObjType(Value value, ObjType type) {
+    return IS_OBJ(value) && OBJ_TYPE(value) == type;
+}
+
+// проверки конкретных объектов
+inline bool IS_BOUND_METHOD(Value value) {
+    return isObjType(value, OBJ_BOUND_METHOD);
+}
+inline bool IS_CLASS(Value value) { return isObjType(value, OBJ_CLASS); }
+inline bool IS_CLOSURE(Value value) { return isObjType(value, OBJ_CLOSURE); }
+inline bool IS_FUNCTION(Value value) { return isObjType(value, OBJ_FUNCTION); }
+inline bool IS_INSTANCE(Value value) { return isObjType(value, OBJ_INSTANCE); }
+inline bool IS_NATIVE(Value value) { return isObjType(value, OBJ_NATIVE); }
+inline bool IS_STRING(Value value) { return isObjType(value, OBJ_STRING); }
+
+// безопасное извлечение объектов (reinterpret_cast работает молниеносно)
+inline ObjBoundMethod *AS_BOUND_METHOD(Value value) {
+    return reinterpret_cast<ObjBoundMethod *>(AS_OBJ(value));
+}
+inline ObjClass *AS_CLASS(Value value) {
+    return reinterpret_cast<ObjClass *>(AS_OBJ(value));
+}
+inline ObjClosure *AS_CLOSURE(Value value) {
+    return reinterpret_cast<ObjClosure *>(AS_OBJ(value));
+}
+inline ObjFunction *AS_FUNCTION(Value value) {
+    return reinterpret_cast<ObjFunction *>(AS_OBJ(value));
+}
+inline ObjInstance *AS_INSTANCE(Value value) {
+    return reinterpret_cast<ObjInstance *>(AS_OBJ(value));
+}
+inline NativeFn AS_NATIVE(Value value) {
+    return reinterpret_cast<ObjNative *>(AS_OBJ(value))->function;
+}
+inline ObjString *AS_STRING(Value value) {
+    return reinterpret_cast<ObjString *>(AS_OBJ(value));
+}
+inline char *AS_CSTRING(Value value) { return AS_STRING(value)->chars; }
+
+// ============================================================================
+// ФУНКЦИИ СОЗДАНИЯ ОБЪЕКТОВ
+// ============================================================================
+
+ObjBoundMethod *newBoundMethod(Value receiver, ObjClosure *method);
+ObjClass *newClass(ObjString *name);
+ObjClosure *newClosure(ObjFunction *function);
 ObjFunction *newFunction();
+ObjInstance *newInstance(ObjClass *klass);
 ObjNative *newNative(NativeFn function);
 
-// =========================
-// Макросы для работы с объектами
-// =========================
-
-#ifndef AS_OBJ
-#error AS_OBJ_NOT_DEFINED
-#endif
-
-#define OBJ_TYPE(value) (AS_OBJ(value)->type)
-
-// Проверка типа объекта
-inline bool isObjType(Value value, ObjType type) {
-    return IS_OBJ(value) && AS_OBJ(value)->type == type;
-}
-#define IS_CLOSURE(value) isObjType(value, OBJ_CLOSURE)
-
-#define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
-#define IS_NATIVE(value) isObjType(value, OBJ_NATIVE)
-// Проверка строки
-#define IS_STRING(value) isObjType(value, OBJ_STRING)
-#define AS_CLOSURE(value) ((ObjClosure *)AS_OBJ(value))
-// Приведение типов
-#define AS_FUNCTION(value) ((ObjFunction *)AS_OBJ(value))
-#define AS_NATIVE(value) (((ObjNative *)AS_OBJ(value))->function)
-#define AS_STRING(value) ((ObjString *)AS_OBJ(value))
-#define AS_CSTRING(value) (((ObjString *)AS_OBJ(value))->chars)
-
-// =========================
-// Функции строк
-// =========================
-
-// Копирует строку в heap
-ObjString *copyString(const char *chars, int length);
-ObjUpvalue *newUpvalue(Value *slot);
-
-// Забирает готовый heap buffer
 ObjString *takeString(char *chars, int length);
+ObjString *copyString(const char *chars, int length);
 
-// Печать объекта
+ObjUpvalue *newUpvalue(Value *slot);
 void printObject(Value value);
-
-#endif
