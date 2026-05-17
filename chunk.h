@@ -1,24 +1,27 @@
-#ifndef skam_chunk_h
-#define skam_chunk_h
+
+#pragma once
 
 #include "common.h"
 #include "value.h"
 
-enum OpCode {
+enum OpCode : uint8_t {
+
     OP_CONSTANT,
     OP_NIL,
     OP_TRUE,
     OP_FALSE,
+    OP_POP,
     OP_GET_LOCAL,
     OP_SET_LOCAL,
     OP_GET_GLOBAL,
+    OP_DEFINE_GLOBAL,
     OP_SET_GLOBAL,
     OP_GET_UPVALUE,
     OP_SET_UPVALUE,
-    OP_DEFINE_GLOBAL,
-
+    OP_GET_PROPERTY,
+    OP_SET_PROPERTY,
+    OP_GET_SUPER,
     OP_EQUAL,
-    OP_POP,
     OP_GREATER,
     OP_LESS,
     OP_ADD,
@@ -32,21 +35,34 @@ enum OpCode {
     OP_JUMP_IF_FALSE,
     OP_LOOP,
     OP_CALL,
+    OP_INVOKE,
+    OP_SUPER_INVOKE,
     OP_CLOSURE,
     OP_CLOSE_UPVALUE,
-    OP_RETURN
+    OP_RETURN,
+    OP_CLASS,
+    OP_INHERIT,
+    OP_METHOD
 };
 
-typedef struct {
-    int count;    // how many of those allocated entries are in use
-    int capacity; // the number of elements in the array we have allocated
-    uint8_t *code;
-    int *lines;
-    ValueArray constants;
-} Chunk;
+class Chunk {
+  public:
+    Chunk();
 
-void initChunk(Chunk *chunk);
-void freeChunk(Chunk *chunk);
-void writeChunk(Chunk *chunk, uint8_t byte, int line);
-int addConstant(Chunk *chunk, Value value);
-#endif
+    void init();
+    void free();
+
+    void write(uint8_t byte, int line);
+    int addConstant(Value value);
+
+    const uint8_t *getCode() const { return code; }
+    const int *getLines() const { return lines; }
+    int getCount() const { return count; }
+    const ValueArray &getConstants() const { return constants; }
+
+    int count;            // сколько байт занято
+    int capacity;         // сколько памяти выделено
+    uint8_t *code;        // массив байткода
+    int *lines;           // номера строк
+    ValueArray constants; // массив констант
+};
